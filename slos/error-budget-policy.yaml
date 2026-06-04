@@ -1,0 +1,46 @@
+# ==============================================================
+# Error Budget Policy & SLO Definitions
+# ==============================================================
+# Defines Service Level Objectives (SLOs), their backing SLIs,
+# and the error budget policy that governs release decisions.
+
+apiVersion: sre/v1
+kind: ErrorBudgetPolicy
+metadata:
+  name: checkout-service-slos
+  team: payments-sre
+
+# --- Service Level Objectives ---
+slos:
+  - name: availability
+    description: "Successful requests over total requests"
+    sli: "sum(rate(http_requests_total{code!~'5..'}[5m])) / sum(rate(http_requests_total[5m]))"
+    objective: 99.9          # percent
+    window: 30d
+
+  - name: latency
+    description: "Requests served faster than 300ms"
+    sli: "histogram_quantile(0.95, http_request_duration_seconds_bucket) < 0.3"
+    objective: 99.5          # percent
+    window: 30d
+
+# --- Error Budget ---
+error_budget:
+  # 99.9% over 30 days => 43.2 minutes of allowed downtime
+  availability_minutes_per_30d: 43.2
+
+# --- Policy: what happens as the budget is consumed ---
+policy:
+  - budget_remaining: ">50%"
+    action: "Normal operations. Ship features freely."
+  - budget_remaining: "25%-50%"
+    action: "Increase change review. Prioritize reliability work."
+  - budget_remaining: "10%-25%"
+    action: "Freeze risky changes. Require SRE sign-off on deploys."
+  - budget_remaining: "<10%"
+    action: "Full feature freeze. All hands on reliability until budget recovers."
+
+# --- Escalation contacts ---
+escalation:
+  primary: "payments-sre-oncall"
+  secondary: "payments-eng-lead"
